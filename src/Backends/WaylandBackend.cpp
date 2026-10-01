@@ -2,6 +2,7 @@
 #include "rendervulkan.hpp"
 #include "wlserver.hpp"
 #include "vblankmanager.hpp"
+#include "gpuvis_trace_utils.h"
 #include "steamcompmgr.hpp"
 #include "edid.h"
 #include "Utils/Defer.h"
@@ -1801,6 +1802,17 @@ namespace gamescope
             UpdateVRRRefreshRate();
         }
 
+        const uint64_t ulArrival = get_time_in_nanos();
+        const uint64_t ulSequence = ( uint64_t( uSeqHi ) << 32ul ) | uSeqLo;
+        gpuvis_trace_printf(
+            "latency-wayland feedback now=%llu presented=%llu age_ns=%lld refresh_cycle_ns=%u sequence=%llu flags=0x%x",
+            static_cast<unsigned long long>( ulArrival ),
+            static_cast<unsigned long long>( ulTime ),
+            static_cast<long long>( ulArrival ) - static_cast<long long>( ulTime ),
+            uRefreshCycle,
+            static_cast<unsigned long long>( ulSequence ),
+            uFlags );
+
         GetVBlankTimer().MarkVBlank( ulTime, true );
         wp_presentation_feedback_destroy( pFeedback );
 
@@ -1809,6 +1821,9 @@ namespace gamescope
     }
     void CWaylandPlane::Wayland_PresentationFeedback_Discarded( struct wp_presentation_feedback *pFeedback )
     {
+        gpuvis_trace_printf(
+            "latency-wayland feedback-discarded now=%llu",
+            static_cast<unsigned long long>( get_time_in_nanos() ) );
         wp_presentation_feedback_destroy( pFeedback );
 
         // Nudge so that steamcompmgr releases commits.
