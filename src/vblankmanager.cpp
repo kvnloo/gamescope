@@ -212,14 +212,39 @@ namespace gamescope
 		// Anchor vblank iterations at their scheduled wakeup point, so
 		// scheduler + dispatch latency counts against the VRR submit time.
 		std::optional<VBlankTime> oVBlank = std::exchange( m_PendingVBlank, std::nullopt );
+		const uint64_t ulNow = get_time_in_nanos();
 		m_ulLastWakeupTime = oVBlank
 			? oVBlank->schedule.ulScheduledWakeupPoint
-			: get_time_in_nanos();
+			: ulNow;
+
+		if ( oVBlank )
+		{
+			gpuvis_trace_printf(
+				"latency-vblank process now=%llu scheduled=%llu target=%llu source_wakeup=%llu dispatch_late_ns=%lld",
+				static_cast<unsigned long long>( ulNow ),
+				static_cast<unsigned long long>( oVBlank->schedule.ulScheduledWakeupPoint ),
+				static_cast<unsigned long long>( oVBlank->schedule.ulTargetVBlank ),
+				static_cast<unsigned long long>( oVBlank->ulWakeupTime ),
+				static_cast<long long>( ulNow ) - static_cast<long long>( oVBlank->schedule.ulScheduledWakeupPoint ) );
+		}
+
 		return oVBlank;
 	}
 
 	void CVBlankTimer::MarkVBlank( uint64_t ulNanos, bool bReArmTimer )
 	{
+		const uint64_t ulNow = get_time_in_nanos();
+		const uint64_t ulPrevious = m_ulLastVBlank.load();
+
+		gpuvis_trace_printf(
+			"latency-vblank mark now=%llu presented=%llu previous=%llu interval_ns=%lld feedback_age_ns=%lld rearm=%d",
+			static_cast<unsigned long long>( ulNow ),
+			static_cast<unsigned long long>( ulNanos ),
+			static_cast<unsigned long long>( ulPrevious ),
+			static_cast<long long>( ulNanos ) - static_cast<long long>( ulPrevious ),
+			static_cast<long long>( ulNow ) - static_cast<long long>( ulNanos ),
+			bReArmTimer ? 1 : 0 );
+
 		m_ulLastVBlank = ulNanos;
 		if ( bReArmTimer )
 		{
@@ -275,6 +300,14 @@ namespace gamescope
 		{
 			m_TimerFDSchedule = CalcNextWakeupTime( bPreemptive );
 
+			gpuvis_trace_printf(
+				"latency-vblank arm now=%llu scheduled=%llu target=%llu last=%llu preemptive=%d",
+				static_cast<unsigned long long>( get_time_in_nanos() ),
+				static_cast<unsigned long long>( m_TimerFDSchedule.ulScheduledWakeupPoint ),
+				static_cast<unsigned long long>( m_TimerFDSchedule.ulTargetVBlank ),
+				static_cast<unsigned long long>( GetLastVBlank() ),
+				bPreemptive ? 1 : 0 );
+
 			ITimerWaitable::ArmTimer( m_TimerFDSchedule.ulScheduledWakeupPoint );
 		}
 	}
@@ -313,7 +346,13 @@ namespace gamescope
 				.ulWakeupTime = m_TimerFDSchedule.ulScheduledWakeupPoint,
 			};
 
-			gpuvis_trace_printf( "vblank timerfd wakeup" );
+			const uint64_t ulPollNow = get_time_in_nanos();
+			gpuvis_trace_printf(
+				"latency-vblank timerfd now=%llu scheduled=%llu target=%llu wake_late_ns=%lld",
+				static_cast<unsigned long long>( ulPollNow ),
+				static_cast<unsigned long long>( m_TimerFDSchedule.ulScheduledWakeupPoint ),
+				static_cast<unsigned long long>( m_TimerFDSchedule.ulTargetVBlank ),
+				static_cast<long long>( ulPollNow ) - static_cast<long long>( m_TimerFDSchedule.ulScheduledWakeupPoint ) );
 
 			ITimerWaitable::DisarmTimer();
 		}
