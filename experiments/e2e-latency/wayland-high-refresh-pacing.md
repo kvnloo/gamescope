@@ -77,3 +77,25 @@ Do not post upstream until at least one exists:
 - [ ] causal timeline
 - [ ] minimal patch or useful negative result
 - [ ] upstream-ready note for `ValveSoftware/gamescope#2412`
+
+## Instrumented branch
+
+This branch adds trace-only markers; it does not intentionally alter pacing policy.
+
+Markers:
+
+- `latency-wayland feedback`: host presentation timestamp -> callback arrival age
+- `latency-wayland feedback-discarded`
+- `latency-vblank mark`: observed presentation interval and feedback age
+- `latency-vblank arm`: chosen wake and target-vblank timestamps
+- `latency-vblank timerfd`: actual poll time vs scheduled wake
+- `latency-vblank process`: steamcompmgr dispatch time vs scheduled wake
+
+Capture an instrumented run with:
+
+```sh
+./experiments/e2e-latency/capture-env.sh
+./experiments/e2e-latency/capture-trace.sh ./build/src/gamescope -- vkcube
+```
+
+The capture helper follows gamescope's existing ftrace/GPUVis workflow and conditionally enables scheduler, DRM-vblank, and fence events that exist on the host.
